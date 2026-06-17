@@ -8,8 +8,9 @@ import json
 #   - drop query entries with an empty query string (Perses rejects them)
 #   - fix bare-number `minStep` (e.g. "2") -> duration string ("2s")
 #   - drop threshold steps whose `value` is non-numeric (e.g. "SECONDARY")
-#   - drop table `columnSettings` entries with an empty `name`, and strip
-#     `align` values outside left|center|right (Perses Table schema rejects "" / null)
+#   - drop table `columnSettings` entries with an empty `name`, strip
+#     `align` values outside left|center|right (Perses Table schema rejects "" / null),
+#     and strip `dataLink` (Grafana-only; Perses Table schema rejects it)
 # Replaces the former mappings6.py + widthnull7.py (one read/write per file).
 
 root_dir = '.'  # change as needed
@@ -75,6 +76,9 @@ def process_file(filepath):
                             continue
                         if 'align' in cs and cs['align'] not in VALID_ALIGN:
                             del cs['align']
+                            changed[0] = True
+                        if 'dataLink' in cs:  # Perses Table schema has no dataLink (Grafana leftover)
+                            del cs['dataLink']
                             changed[0] = True
                     kept.append(cs)
                 obj['columnSettings'] = kept
