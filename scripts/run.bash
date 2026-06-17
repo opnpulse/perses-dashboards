@@ -2,7 +2,11 @@
 
 set -euo pipefail  # Exit on error, unset variables, and pipe failures
 
-FOLDERS=(
+# Resolve dirs: scripts live next to this file; grafana repo is env-overridable.
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/opnpulse/grafana-dashboards}"
+
+DEFAULT_FOLDERS=(
 # working
     cassandra
     druid
@@ -37,6 +41,13 @@ FOLDERS=(
 
 )
 
+# Folders to process: CLI args win, else the default list above.
+if (($# > 0)); then
+    FOLDERS=("$@")
+else
+    FOLDERS=("${DEFAULT_FOLDERS[@]}")
+fi
+
 # Colors for nice output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,43 +68,40 @@ for folder in "${FOLDERS[@]}"; do
     echo -e "${YELLOW}Processing folder: $folder${NC}"
     echo -e "${YELLOW}════════════════════════════════════════════════${NC}"
 
-    fldr=/home/arnob/go/src/go.opscenter.dev/grafana-dashboards/$folder
+    fldr="$GRAFANA_DIR/$folder"
     echo "$fldr"
     if cd "$fldr" 2>/dev/null; then
         (
             set -e
 
             echo "0. Running wipeout0.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/wipeout0.py
+            python3 "$SCRIPTS_DIR/wipeout0.py"
 
             echo "1. Running modify1.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/modify1.py
+            python3 "$SCRIPTS_DIR/modify1.py"
 
             echo "2. Running curl2.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/curl2.py
+            python3 "$SCRIPTS_DIR/curl2.py"
 
             echo "3. Running revert_modify3.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/revert_modify3.py
+            python3 "$SCRIPTS_DIR/revert_modify3.py"
 
             echo "4. Running filecleanup4.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/filecleanup4.py
+            python3 "$SCRIPTS_DIR/filecleanup4.py"
 
             echo "5. Running cleaning5.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/cleaning5.py
+            python3 "$SCRIPTS_DIR/cleaning5.py"
 
             echo "6. Running migrate6.py"
-            if python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/migrate6.py; then
+            if python3 "$SCRIPTS_DIR/migrate6.py"; then
                 echo "Migration succeeded"
             else
                 echo "Migration failed"
                 exit 1
             fi
 
-            echo "6b. Running mappings6.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/mappings6.py
-
-            echo "7. Running widthnull7.py"
-            python3 /home/arnob/go/src/go.opscenter.dev/perses/scripts/widthnull7.py
+            echo "6b. Running fixups67.py"
+            python3 "$SCRIPTS_DIR/fixups67.py"
 
             echo -e "\n${GREEN}✓ All Python scripts completed successfully in $folder${NC}\n"
         )
