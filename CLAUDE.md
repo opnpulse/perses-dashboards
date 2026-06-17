@@ -20,20 +20,20 @@ The pipeline depends on three local services. Started with docker.
 
 ## The migration pipeline
 
-`scripts/run.bash` is the entry point. With no args it iterates over the default `FOLDERS` list (database/tool names); pass folder names as args (e.g. `./run.bash postgres`) to process only those. Folders live under `$GRAFANA_DIR/<folder>` (env var, defaults to `~/go/src/opnpulse/grafana-dashboards`); the scripts dir is auto-derived from the script location. For each folder it runs the numbered Python scripts in order, then `percli apply`s every resulting `*-migrated.json`. The default `FOLDERS` list also documents which dashboards work vs. which still have issues (e.g. `connectcluster`, `ignite`, `mssqlserver` are commented out).
+`scripts/run.bash` is the entry point. With no args it iterates over the default `FOLDERS` list (database/tool names); pass folder names as args (e.g. `./run.bash postgres`) to process only those. Folders live under `$GRAFANA_DIR/<folder>` (env var, defaults to `~/go/src/opnpulse/grafana-dashboards`); the scripts dir is auto-derived from the script location. For each folder it runs the numbered Python scripts in order, then `percli apply`s every resulting `*-perses.json`. The default `FOLDERS` list also documents which dashboards work vs. which still have issues (e.g. `connectcluster`, `ignite`, `mssqlserver` are commented out).
 
 The numbered scripts form a strict chain — each consumes the file-suffix the previous one produced. Run them from inside a dashboard folder, in order:
 
 | Step | Script | Action | Suffix in → out |
 |------|--------|--------|-----------------|
-| 0 | `wipeout0.py` | Delete leftover intermediates from prior runs | removes `-hi/-grafana12/-migrated/-ready.json` |
+| 0 | `wipeout0.py` | Delete leftover intermediates from prior runs | removes `-hi/-grafana12/-perses/-ready.json` |
 | 1 | `modify1.py` | Wrap raw dashboard in `{dashboard, overwrite, folderId}` for Grafana import API | `.json` → `-hi.json` |
 | 2 | `curl2.py` | POST to Grafana `/api/dashboards/import`, then GET it back | `-hi.json` → `-grafana12.json` |
 | 3 | `revert_modify3.py` | Unwrap the `dashboard` key from the re-exported file | `-grafana12.json` → `-ready.json` |
-| 4 | `filecleanup4.py` | Delete `-hi/-grafana12/-migrated.json` intermediates | — |
+| 4 | `filecleanup4.py` | Delete `-hi/-grafana12/-perses.json` intermediates | — |
 | 5 | `cleaning5.py` | Strip unsupported keys (`pluginVersion`, `iteration`, `links`, `transformations`), drop `row` panels, remove `fieldConfig.defaults.mappings`, pin each target to the Prometheus datasource (`{type:"prometheus", uid:"global-ds-proxy"}`) unless it already has a typed one | edits `-ready.json` in place |
-| 6 | `migrate6.py` | `percli migrate --project pp --online -o json` | `-ready.json` → `-migrated.json` |
-| 6b | `fixups67.py` | One pass over `-migrated.json`: delete remaining `mappings` arrays, rewrite `color: "text"` → `color: "#c4162a"`, delete `width: null` keys, drop query entries with an empty `query` string | edits `-migrated.json` |
+| 6 | `migrate6.py` | `percli migrate --project pp --online -o json` | `-ready.json` → `-perses.json` |
+| 6b | `fixups67.py` | One pass over `-perses.json`: delete remaining `mappings` arrays, rewrite `color: "text"` → `color: "#c4162a"`, delete `width: null` keys, drop query entries with an empty `query` string | edits `-perses.json` |
 
 The post-migration fixups (steps 5, 6b) encode Perses-specific quirks discovered manually: Perses rejects `mappings` arrays, `width: null`, and empty query strings, and `color: "text"` renders wrong.
 

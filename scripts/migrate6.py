@@ -9,7 +9,7 @@ root_dir = '.'  # Change as needed
 # Function to process and run percli migrate command
 def process_file(filepath):
     # Construct the output filename
-    new_filename = filepath.replace('-ready.json', '-migrated.json')
+    new_filename = filepath.replace('-ready.json', '-perses.json')
     
     # Construct the percli command
     command = [

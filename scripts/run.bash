@@ -104,9 +104,10 @@ for folder in "${FOLDERS[@]}"; do
             python3 "$SCRIPTS_DIR/fixups67.py"
 
             echo -e "\n${GREEN}✓ All Python scripts completed successfully in $folder${NC}\n"
-        )
+        ) && subshell_ok=1 || subshell_ok=0
 
-        if [[ $? -eq 0 ]]; then
+        # Capture via && / || so `set -e` doesn't abort the whole run when one folder fails.
+        if [[ $subshell_ok -eq 1 ]]; then
             success_count=$((success_count + 1))
         else
             echo -e "${RED}✗ One or more Python scripts failed in $folder${NC}"
@@ -115,18 +116,19 @@ for folder in "${FOLDERS[@]}"; do
             continue
         fi
 
-        # Look for any *-migrated.json files in this folder and apply with percli
+        # Look for any *-perses.json files in this folder and apply with percli
         shopt -s nullglob
-        json_files=( *-migrated.json )
+        json_files=( *-perses.json )
         if ((${#json_files[@]})); then
             echo "Found ${#json_files[@]} migrated JSON files in $folder"
             for jf in "${json_files[@]}"; do
                 echo "Applying percli to: $jf"
-                percli apply -f "$jf"
+                # Don't let one failed apply abort the batch (set -e); report and continue.
+                percli apply -f "$jf" || echo -e "${RED}✗ percli apply failed for $jf${NC}"
             done
-            echo -e "${GREEN}✓ percli apply successful for all migrated files in $folder${NC}\n"
+            echo -e "${GREEN}✓ percli apply done for all migrated files in $folder${NC}\n"
         else
-            echo -e "${YELLOW}⚠ No *-migrated.json file found in $folder, skipping percli apply${NC}\n"
+            echo -e "${YELLOW}⚠ No *-perses.json file found in $folder, skipping percli apply${NC}\n"
         fi
         shopt -u nullglob
 

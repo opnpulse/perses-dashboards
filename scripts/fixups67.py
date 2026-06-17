@@ -1,7 +1,7 @@
 import os
 import json
 
-# Single post-migration pass over every *-migrated.json:
+# Single post-migration pass over every *-perses.json:
 #   - drop unsupported `mappings` arrays (Perses rejects them)
 #   - rewrite color "text" -> "#c4162a" (renders wrong otherwise)
 #   - drop `width: null` keys
@@ -54,7 +54,7 @@ def process_file(filepath):
 
 for subdir, _, files in os.walk(root_dir):
     for file in files:
-        if file.endswith('-migrated.json'):
+        if file.endswith('-perses.json'):
             process_file(os.path.join(subdir, file))
 
 print("Fixups complete.")

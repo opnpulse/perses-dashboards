@@ -20,19 +20,51 @@ def clean_panel(panel):
     # Clean fieldConfig mappings
     if "fieldConfig" in panel and "defaults" in panel["fieldConfig"]:
         panel["fieldConfig"]["defaults"].pop("mappings", None)
-    # Pin each target to the Prometheus datasource unless it already carries a typed one
+    # Pin each target to the Prometheus datasource unless it already carries a typed one.
+    # A datasource dict missing a "type" (e.g. {"uid": "${datasource}"}) is ambiguous and
+    # makes `percli migrate` randomly emit LokiLogQuery, so set the type while keeping the uid.
     for target in panel.get("targets", []):
-        if not isinstance(target.get("datasource"), dict):
+        ds = target.get("datasource")
+        if not isinstance(ds, dict):
             target["datasource"] = dict(PROM_DATASOURCE)
+        elif not ds.get("type"):
+            ds["type"] = PROM_DATASOURCE["type"]
     return panel
+
+def hoist_rows(panels):
+    # Collapsed rows nest their child panels inside `row["panels"]`; clean_panel drops
+    # the row, so hoist those children to the top level first to avoid losing them.
+    # (Expanded rows keep their children as top-level siblings and an empty list here.)
+    flat = []
+    for p in panels:
+        if p.get("type") == "row":
+            flat.extend(p.get("panels", []))
+        flat.append(p)
+    return flat
+
+def normalize_templating(data):
+    # A single-select var (multi=false) with a list `current` value crashes
+    # `percli migrate` ("you can not use a list of default values if allowMultiple
+    # is set to false"); collapse the saved selection to its first element.
+    for var in data.get("templating", {}).get("list", []):
+        if var.get("multi"):
+            continue
+        current = var.get("current")
+        if isinstance(current, dict):
+            for key in ("value", "text"):
+                if isinstance(current.get(key), list):
+                    current[key] = current[key][0] if current[key] else ""
 
 def process_file(filepath):
     try:
         with open(filepath) as f:
             data = json.load(f)
 
+        normalize_templating(data)
+
         if "panels" in data:
-            data["panels"] = [p for p in (clean_panel(p) for p in data["panels"]) if p]
+            hoisted = hoist_rows(data["panels"])
+            data["panels"] = [p for p in (clean_panel(p) for p in hoisted) if p]
 
         # Construct output filename (optional: overwrite or save separately)
 #         new_filename = filepath.replace('-ready.json', '-cleaned.json')
