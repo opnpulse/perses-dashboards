@@ -9,19 +9,28 @@ GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/opnpulse/grafana-dashboards}"
 DEFAULT_FOLDERS=(
 # working
     cassandra
+    clickhouse
+    connectcluster
     druid
     elasticsearch
-    ferretdb
+    hanadb
     hazelcast
+    ignite
     kafka
     mariadb
     memcached
+    milvus
     mongodb
+    mssqlserver
     mysql
+    neo4j
+    oracle
+    perconaxtradb
     pgbouncer
     pgpool
     postgres
     proxysql
+    qdrant
     rabbitmq
     redis
     singlestore
@@ -33,12 +42,6 @@ DEFAULT_FOLDERS=(
     policy
     scanner
     stash
-
-# Still issue
-#    connectcluster
-#    ignite
-#    mssqlserver
-
 )
 
 # Folders to process: CLI args win, else the default list above.
