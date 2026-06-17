@@ -10,6 +10,11 @@ def process_file(filepath):
     with open(filepath, 'r') as f:
         data = json.load(f)
 
+    # A non-null dashboard id makes Grafana's import API try to overwrite an
+    # existing dashboard with that id and 404 ("Dashboard not found") when none
+    # exists; null it so import creates/overwrites by uid instead.
+    data["id"] = None
+
     modified_data = {
         "dashboard": data,
         "overwrite": True,
