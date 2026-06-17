@@ -58,9 +58,9 @@ percli apply -f migrated_grafana_mongo_pod.json
 ### Manual
 ```
 cd ~/go/src/go.opscenter.dev/perses
-percli migrate -f /home/arnob/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-pod-dashboard-ready.json --project pp --online -o json > test/mongo_pod.json
-percli migrate -f /home/arnob/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-database-replset-dashboard-ready.json --project pp --online -o json > test/mongo_replset.json
-percli migrate -f /home/arnob/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-summary-dashboard-ready.json --project pp --online -o json > test/mongo_summary.json
+percli migrate -f $HOME/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-pod-dashboard-ready.json --project pp --online -o json > test/mongo_pod.json
+percli migrate -f $HOME/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-database-replset-dashboard-ready.json --project pp --online -o json > test/mongo_replset.json
+percli migrate -f $HOME/go/src/go.opscenter.dev/grafana-dashboards/mongodb/mongodb-summary-dashboard-ready.json --project pp --online -o json > test/mongo_summary.json
 
 
 Changes: (in summary dashboards)
