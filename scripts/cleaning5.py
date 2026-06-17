@@ -4,6 +4,12 @@ import json
 # Root directory to start traversal
 root_dir = '.'   # change if needed
 
+# Prometheus datasource on the Perses server; injected onto targets so
+# `percli migrate` deterministically picks PrometheusTimeSeriesQuery. Without
+# an explicit type, migrate randomly maps PromQL targets to LokiLogQuery
+# (Go-map iteration order), which never executes against Prometheus.
+PROM_DATASOURCE = {"type": "prometheus", "uid": "global-ds-proxy"}
+
 def clean_panel(panel):
     # Remove unsupported keys
     for key in ["pluginVersion", "iteration", "links", "transformations"]:
@@ -14,6 +20,10 @@ def clean_panel(panel):
     # Clean fieldConfig mappings
     if "fieldConfig" in panel and "defaults" in panel["fieldConfig"]:
         panel["fieldConfig"]["defaults"].pop("mappings", None)
+    # Pin each target to the Prometheus datasource unless it already carries a typed one
+    for target in panel.get("targets", []):
+        if not isinstance(target.get("datasource"), dict):
+            target["datasource"] = dict(PROM_DATASOURCE)
     return panel
 
 def process_file(filepath):

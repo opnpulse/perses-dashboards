@@ -31,11 +31,13 @@ The numbered scripts form a strict chain — each consumes the file-suffix the p
 | 2 | `curl2.py` | POST to Grafana `/api/dashboards/import`, then GET it back | `-hi.json` → `-grafana12.json` |
 | 3 | `revert_modify3.py` | Unwrap the `dashboard` key from the re-exported file | `-grafana12.json` → `-ready.json` |
 | 4 | `filecleanup4.py` | Delete `-hi/-grafana12/-migrated.json` intermediates | — |
-| 5 | `cleaning5.py` | Strip unsupported keys (`pluginVersion`, `iteration`, `links`, `transformations`), drop `row` panels, remove `fieldConfig.defaults.mappings` | edits `-ready.json` in place |
+| 5 | `cleaning5.py` | Strip unsupported keys (`pluginVersion`, `iteration`, `links`, `transformations`), drop `row` panels, remove `fieldConfig.defaults.mappings`, pin each target to the Prometheus datasource (`{type:"prometheus", uid:"global-ds-proxy"}`) unless it already has a typed one | edits `-ready.json` in place |
 | 6 | `migrate6.py` | `percli migrate --project pp --online -o json` | `-ready.json` → `-migrated.json` |
-| 6b | `fixups67.py` | One pass over `-migrated.json`: delete remaining `mappings` arrays, rewrite `color: "text"` → `color: "#c4162a"`, delete `width: null` keys | edits `-migrated.json` |
+| 6b | `fixups67.py` | One pass over `-migrated.json`: delete remaining `mappings` arrays, rewrite `color: "text"` → `color: "#c4162a"`, delete `width: null` keys, drop query entries with an empty `query` string | edits `-migrated.json` |
 
-The post-migration fixups (steps 5, 6b) encode Perses-specific quirks discovered manually: Perses rejects `mappings` arrays and `width: null`, and `color: "text"` renders wrong.
+The post-migration fixups (steps 5, 6b) encode Perses-specific quirks discovered manually: Perses rejects `mappings` arrays, `width: null`, and empty query strings, and `color: "text"` renders wrong.
+
+The target-datasource pinning in step 5 fixes a `percli migrate` non-determinism: when a target has no resolvable datasource type (the Grafana round-trip leaves `datasource: null`), migrate randomly maps PromQL targets to `LokiLogQuery` instead of `PrometheusTimeSeriesQuery` via Go-map iteration order — those Loki-typed queries never execute against Prometheus. The hardcoded `global-ds-proxy` is the Prometheus datasource name on the Perses server; keep it in sync with the environment alongside the URLs/ports in `curl2.py`/`migrate6.py`.
 
 ## Key constraints when modifying scripts
 

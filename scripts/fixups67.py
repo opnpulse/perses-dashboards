@@ -5,9 +5,15 @@ import json
 #   - drop unsupported `mappings` arrays (Perses rejects them)
 #   - rewrite color "text" -> "#c4162a" (renders wrong otherwise)
 #   - drop `width: null` keys
+#   - drop query entries with an empty query string (Perses rejects them)
 # Replaces the former mappings6.py + widthnull7.py (one read/write per file).
 
 root_dir = '.'  # change as needed
+
+def is_empty_query(q):
+    # A migrated query whose plugin spec carries an empty `query` string.
+    spec = q.get('spec', {}).get('plugin', {}).get('spec', {}) if isinstance(q, dict) else {}
+    return 'query' in spec and spec['query'] == ''
 
 def process_file(filepath):
     with open(filepath, 'r') as f:
@@ -23,6 +29,11 @@ def process_file(filepath):
             if obj.get('width') is None and 'width' in obj:
                 del obj['width']
                 changed[0] = True
+            if isinstance(obj.get('queries'), list):
+                kept = [q for q in obj['queries'] if not is_empty_query(q)]
+                if len(kept) != len(obj['queries']):
+                    obj['queries'] = kept
+                    changed[0] = True
             for k, v in list(obj.items()):
                 if k == 'color' and v == 'text':
                     obj[k] = '#c4162a'
