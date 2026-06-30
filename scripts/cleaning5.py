@@ -17,9 +17,11 @@ def clean_panel(panel):
     # Remove row panels
     if panel.get("type") == "row":
         return None
-    # Clean fieldConfig mappings
+    # Clean fieldConfig mappings, except on the "Role" panel whose Primary/Standby
+    # value mappings must survive migration (they are the panel's whole purpose).
     if "fieldConfig" in panel and "defaults" in panel["fieldConfig"]:
-        panel["fieldConfig"]["defaults"].pop("mappings", None)
+        if panel.get("title") != "Role":
+            panel["fieldConfig"]["defaults"].pop("mappings", None)
     # Pin each target to the Prometheus datasource unless it already carries a typed one.
     # A datasource dict missing a "type" (e.g. {"uid": "${datasource}"}) is ambiguous and
     # makes `percli migrate` randomly emit LokiLogQuery, so set the type while keeping the uid.

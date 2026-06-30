@@ -41,9 +41,15 @@ def process_file(filepath):
 
     changed = [False]
 
-    def modify(obj):
+    def is_role_panel(obj):
+        return (isinstance(obj, dict) and obj.get('kind') == 'Panel'
+                and obj.get('spec', {}).get('display', {}).get('name') == 'Role')
+
+    def modify(obj, protected=False):
         if isinstance(obj, dict):
-            if isinstance(obj.get('mappings'), list):
+            # Keep mappings inside the "Role" panel subtree (Primary/Standby); strip elsewhere.
+            protected = protected or is_role_panel(obj)
+            if isinstance(obj.get('mappings'), list) and not protected:
                 del obj['mappings']
                 changed[0] = True
             if obj.get('width') is None and 'width' in obj:
@@ -86,10 +92,10 @@ def process_file(filepath):
                 if k == 'color' and v == 'text':
                     obj[k] = '#c4162a'
                     changed[0] = True
-                modify(v)
+                modify(v, protected)
         elif isinstance(obj, list):
             for item in obj:
-                modify(item)
+                modify(item, protected)
 
     modify(data)
 
