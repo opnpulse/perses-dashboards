@@ -17,6 +17,13 @@ root_dir = '.'  # change as needed
 
 VALID_ALIGN = {"left", "center", "right"}
 
+# Panels whose value mappings must survive (numeric metric -> role/state text).
+PROTECTED_MAPPING_TITLES = {"Role", "ReplSet State"}
+
+# Grafana's auto-interval template var migrates to the literal "$__auto_interval_<name>",
+# which Perses rejects as a duration string. Drop it / replace it with a real duration.
+AUTO_INTERVAL_PREFIX = "$__auto_interval"
+
 def is_empty_query(q):
     # A migrated query whose plugin spec carries an empty `query` string.
     spec = q.get('spec', {}).get('plugin', {}).get('spec', {}) if isinstance(q, dict) else {}
@@ -41,17 +48,34 @@ def process_file(filepath):
 
     changed = [False]
 
-    def is_role_panel(obj):
+    def is_protected_panel(obj):
         return (isinstance(obj, dict) and obj.get('kind') == 'Panel'
-                and obj.get('spec', {}).get('display', {}).get('name') == 'Role')
+                and obj.get('spec', {}).get('display', {}).get('name') in PROTECTED_MAPPING_TITLES)
+
+    def is_auto_interval(v):
+        return isinstance(v, str) and v.startswith(AUTO_INTERVAL_PREFIX)
 
     def modify(obj, protected=False):
         if isinstance(obj, dict):
-            # Keep mappings inside the "Role" panel subtree (Primary/Standby); strip elsewhere.
-            protected = protected or is_role_panel(obj)
+            # Keep mappings inside a protected panel subtree (role/state text); strip elsewhere.
+            protected = protected or is_protected_panel(obj)
             if isinstance(obj.get('mappings'), list) and not protected:
                 del obj['mappings']
                 changed[0] = True
+            # Sanitize Grafana auto-interval leftovers that Perses can't parse as durations.
+            if is_auto_interval(obj.get('defaultValue')):
+                obj['defaultValue'] = '1m'
+                changed[0] = True
+            if is_auto_interval(obj.get('minStep')):
+                obj['minStep'] = ''
+                changed[0] = True
+            if isinstance(obj.get('values'), list):
+                kept = [v for v in obj['values']
+                        if not is_auto_interval(v)
+                        and not (isinstance(v, dict) and is_auto_interval(v.get('value')))]
+                if len(kept) != len(obj['values']):
+                    obj['values'] = kept
+                    changed[0] = True
             if obj.get('width') is None and 'width' in obj:
                 del obj['width']
                 changed[0] = True

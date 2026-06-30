@@ -10,6 +10,10 @@ root_dir = '.'   # change if needed
 # (Go-map iteration order), which never executes against Prometheus.
 PROM_DATASOURCE = {"type": "prometheus", "uid": "global-ds-proxy"}
 
+# Panels whose value mappings encode their whole meaning (numeric metric -> role/state
+# text) and must survive migration. Everything else gets its mappings stripped.
+PROTECTED_MAPPING_TITLES = {"Role", "ReplSet State"}
+
 def clean_panel(panel):
     # Remove unsupported keys
     for key in ["pluginVersion", "iteration", "links", "transformations"]:
@@ -17,10 +21,10 @@ def clean_panel(panel):
     # Remove row panels
     if panel.get("type") == "row":
         return None
-    # Clean fieldConfig mappings, except on the "Role" panel whose Primary/Standby
-    # value mappings must survive migration (they are the panel's whole purpose).
+    # Clean fieldConfig mappings, except on panels whose value mappings must survive
+    # migration (they are the panel's whole purpose). See PROTECTED_MAPPING_TITLES.
     if "fieldConfig" in panel and "defaults" in panel["fieldConfig"]:
-        if panel.get("title") != "Role":
+        if panel.get("title") not in PROTECTED_MAPPING_TITLES:
             panel["fieldConfig"]["defaults"].pop("mappings", None)
     # Pin each target to the Prometheus datasource unless it already carries a typed one.
     # A datasource dict missing a "type" (e.g. {"uid": "${datasource}"}) is ambiguous and
