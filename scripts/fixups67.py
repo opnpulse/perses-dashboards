@@ -24,6 +24,19 @@ PROTECTED_MAPPING_TITLES = {"Role", "ReplSet State"}
 # which Perses rejects as a duration string. Drop it / replace it with a real duration.
 AUTO_INTERVAL_PREFIX = "$__auto_interval"
 
+# percli copies the source Grafana `uid` verbatim into `metadata.name`, and
+# `.status.dashboard.id` surfaces that name. Duplicate/opaque source uids therefore
+# make distinct dashboards collide on the same Perses dashboard (last writer wins).
+# Derive a deterministic, self-documenting name from the display name instead - this
+# matches how the installer chart derives the PersesDashboard CR name.
+def deterministic_name(display, filepath):
+    parts = [p for p in display.lower().replace(' ', '').split('/') if p]
+    name = '-'.join(parts)[:63].rstrip('-')
+    # legacy/* dashboards share a display name with their current counterpart.
+    if 'legacy' in filepath.lower() and not name.endswith('-legacy'):
+        name = (name[:56].rstrip('-')) + '-legacy'
+    return name
+
 def is_empty_query(q):
     # A migrated query whose plugin spec carries an empty `query` string.
     spec = q.get('spec', {}).get('plugin', {}).get('spec', {}) if isinstance(q, dict) else {}
@@ -122,6 +135,13 @@ def process_file(filepath):
                 modify(item, protected)
 
     modify(data)
+
+    display = data.get('spec', {}).get('display', {}).get('name')
+    if display:
+        want = deterministic_name(display, filepath)
+        if data.get('metadata', {}).get('name') != want:
+            data.setdefault('metadata', {})['name'] = want
+            changed[0] = True
 
     if changed[0]:
         with open(filepath, 'w') as f:
