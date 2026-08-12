@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 from statlabels import (PROTECTED_MAPPING_TITLES, VALUE_IS_LABEL,
                         VALUE_MAPPED_TITLES, bare_label)
@@ -115,11 +116,27 @@ def normalize_templating(data):
                 if isinstance(current.get(key), list):
                     current[key] = current[key][0] if current[key] else ""
 
+def normalize_tags(data):
+    # Perses rejects any tag outside [a-z0-9 _-] ("contains invalid characters"),
+    # so Grafana tags like "MongoDB", "JMX exporter" or "milvus2.0" fail migration.
+    tags = data.get("tags")
+    if not isinstance(tags, list):
+        return
+    out = []
+    for tag in tags:
+        if not isinstance(tag, str):
+            continue
+        clean = re.sub(r"[^a-z0-9 _-]", "-", tag.lower()).strip(" -")
+        if clean and clean not in out:
+            out.append(clean)
+    data["tags"] = out
+
 def process_file(filepath):
     try:
         with open(filepath) as f:
             data = json.load(f)
 
+        normalize_tags(data)
         normalize_templating(data)
 
         if "panels" in data:

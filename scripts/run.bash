@@ -106,6 +106,10 @@ for folder in "${FOLDERS[@]}"; do
             echo "6b. Running fixups67.py"
             python3 "$SCRIPTS_DIR/fixups67.py"
 
+            # Only on success: a failed run keeps its -ready.json files for debugging.
+            echo "7. Removing -ready.json intermediates"
+            python3 "$SCRIPTS_DIR/filecleanup4.py" -ready.json
+
             echo -e "\n${GREEN}✓ All Python scripts completed successfully in $folder${NC}\n"
         ) && subshell_ok=1 || subshell_ok=0
 
