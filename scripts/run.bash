@@ -4,7 +4,7 @@ set -euo pipefail  # Exit on error, unset variables, and pipe failures
 
 # Resolve dirs: scripts live next to this file; grafana repo is env-overridable.
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/opnpulse/grafana-dashboards}"
+GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/go.opnpulse.dev/dashboards}"
 
 DEFAULT_FOLDERS=(
 # working
@@ -105,6 +105,10 @@ for folder in "${FOLDERS[@]}"; do
 
             echo "6b. Running fixups67.py"
             python3 "$SCRIPTS_DIR/fixups67.py"
+
+            # Only on success: a failed run keeps its -ready.json files for debugging.
+            echo "7. Removing -ready.json intermediates"
+            python3 "$SCRIPTS_DIR/filecleanup4.py" -ready.json
 
             echo -e "\n${GREEN}✓ All Python scripts completed successfully in $folder${NC}\n"
         ) && subshell_ok=1 || subshell_ok=0

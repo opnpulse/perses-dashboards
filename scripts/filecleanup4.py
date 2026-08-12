@@ -1,12 +1,15 @@
 import os
+import sys
 
-def remove_target_files(root_dir='.'):
+DEFAULT_SUFFIXES = ('-hi.json', '-grafana12.json', '-perses.json')
+
+def remove_target_files(suffixes, root_dir='.'):
     for subdir, _, files in os.walk(root_dir):
         for file in files:
-            if file.endswith('-hi.json') or file.endswith('-grafana12.json') or file.endswith('-perses.json'): # or file.endswith('-ready.json'):
+            if file.endswith(suffixes):
                 filepath = os.path.join(subdir, file)
                 os.remove(filepath)
                 print(f"Removed: {filepath}")
 
 if __name__ == "__main__":
-    remove_target_files()
+    remove_target_files(tuple(sys.argv[1:]) or DEFAULT_SUFFIXES)
