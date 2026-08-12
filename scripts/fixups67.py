@@ -1,6 +1,9 @@
 import os
 import json
 
+from statlabels import (PROTECTED_MAPPING_TITLES, VALUE_IS_LABEL,
+                        VALUE_MAPPED_TITLES, bare_label)
+
 # Single post-migration pass over every *-perses.json:
 #   - drop unsupported `mappings` arrays (Perses rejects them)
 #   - rewrite color "text" -> "#c4162a" (renders wrong otherwise)
@@ -11,14 +14,14 @@ import json
 #   - drop table `columnSettings` entries with an empty `name`, strip
 #     `align` values outside left|center|right (Perses Table schema rejects "" / null),
 #     and strip `dataLink` (Grafana-only; Perses Table schema rejects it)
+#   - promote label-valued stat panels (see statlabels.py)
+#   - expand merged table `pod` columns into pod #1..#N
+#   - restore empty mapping display values, override Role mapping colors
 # Replaces the former mappings6.py + widthnull7.py (one read/write per file).
 
 root_dir = '.'  # change as needed
 
 VALID_ALIGN = {"left", "center", "right"}
-
-# Panels whose value mappings must survive (numeric metric -> role/state text).
-PROTECTED_MAPPING_TITLES = {"Role", "ReplSet State"}
 
 # Grafana's auto-interval template var migrates to the literal "$__auto_interval_<name>",
 # which Perses rejects as a duration string. Drop it / replace it with a real duration.
@@ -36,6 +39,89 @@ def deterministic_name(display, filepath):
     if 'legacy' in filepath.lower() and not name.endswith('-legacy'):
         name = (name[:56].rstrip('-')) + '-legacy'
     return name
+
+# Grafana's palette maps these to washed-out blues; #104 picked readable colors by hand.
+MAPPING_COLORS = {
+    ('Role', 'master'): '#5794f2',
+    ('Role', 'slave'): '#8ab8ff',
+    ('Role', 'Primary'): '#ffffff',
+    ('Role', 'Standby'): '#ffffff',
+}
+
+def stat_label(panel_spec):
+    # The label a stat panel should display instead of its (meaningless) metric value.
+    plugin = panel_spec.get('plugin', {})
+    if plugin.get('kind') != 'StatChart':
+        return None
+    queries = panel_spec.get('queries', [])
+    if len(queries) != 1:
+        return None
+    snf = queries[0].get('spec', {}).get('plugin', {}).get('spec', {}).get('seriesNameFormat')
+    label = bare_label(snf)
+    if not label:
+        return None
+    existing = plugin.get('spec', {}).get('metricLabel')
+    if isinstance(existing, str) and existing.strip():
+        return label
+    return label if label in VALUE_IS_LABEL else None
+
+def promote_stat_label(panel_spec, label, changed):
+    spec = panel_spec['plugin']['spec']
+    query_spec = panel_spec['queries'][0]['spec']['plugin']['spec']
+    if query_spec.get('seriesNameFormat') != '{{%s}}' % label:
+        query_spec['seriesNameFormat'] = '{{%s}}' % label
+        changed[0] = True
+    if spec.get('metricLabel') != label:
+        spec['metricLabel'] = label
+        changed[0] = True
+    # A sparkline behind a text value renders as a stray graph.
+    if 'sparkline' in spec:
+        del spec['sparkline']
+        changed[0] = True
+    # Averaging a label series yields NaN; take the last sample.
+    if spec.get('calculation') == 'mean':
+        spec['calculation'] = 'last-number'
+        changed[0] = True
+
+def expand_pod_columns(panel_spec, changed):
+    # A table merging N instant queries gets one `pod` column per query (pod #1..#N).
+    # The migration collapses them into a single `pod`, which then matches no column.
+    plugin = panel_spec.get('plugin', {})
+    if plugin.get('kind') != 'Table':
+        return
+    settings = plugin.get('spec', {}).get('columnSettings')
+    if not isinstance(settings, list):
+        return
+    idx = next((i for i, c in enumerate(settings)
+                if isinstance(c, dict) and c.get('name') == 'pod'), None)
+    if idx is None:
+        return
+    n = len(panel_spec.get('queries', []))
+    if n < 2:
+        return
+    first = {k: v for k, v in settings[idx].items() if k != 'format'}
+    first['name'] = 'pod #1'
+    first['align'] = 'left'
+    settings[idx:idx + 1] = [first] + [{'name': 'pod #%d' % i, 'hide': True}
+                                       for i in range(2, n + 1)]
+    changed[0] = True
+
+def fix_mappings(panel_spec, changed):
+    title = panel_spec.get('display', {}).get('name')
+    for mapping in panel_spec.get('plugin', {}).get('spec', {}).get('mappings') or []:
+        if not isinstance(mapping, dict):
+            continue
+        spec = mapping.get('spec', {})
+        result = spec.get('result', {})
+        # Grafana omits `text` when the mapped value doubles as its own label
+        # ("WipeOut" -> "WipeOut"); percli turns that into an empty display value.
+        if result.get('value') == '' and spec.get('value'):
+            result['value'] = spec['value']
+            changed[0] = True
+        color = MAPPING_COLORS.get((title, result.get('value')))
+        if color and result.get('color') != color:
+            result['color'] = color
+            changed[0] = True
 
 def is_empty_query(q):
     # A migrated query whose plugin spec carries an empty `query` string.
@@ -61,9 +147,24 @@ def process_file(filepath):
 
     changed = [False]
 
+    # Label-valued stat panels keep their mappings (the mapped text *is* the display).
+    label_panels = set()
+    for panel in data.get('spec', {}).get('panels', {}).values():
+        if not isinstance(panel, dict) or 'spec' not in panel:
+            continue
+        panel_spec = panel['spec']
+        label = stat_label(panel_spec)
+        if label:
+            label_panels.add(id(panel))
+            promote_stat_label(panel_spec, label, changed)
+        expand_pod_columns(panel_spec, changed)
+        fix_mappings(panel_spec, changed)
+
     def is_protected_panel(obj):
         return (isinstance(obj, dict) and obj.get('kind') == 'Panel'
-                and obj.get('spec', {}).get('display', {}).get('name') in PROTECTED_MAPPING_TITLES)
+                and (id(obj) in label_panels
+                     or obj.get('spec', {}).get('display', {}).get('name')
+                     in PROTECTED_MAPPING_TITLES | VALUE_MAPPED_TITLES))
 
     def is_auto_interval(v):
         return isinstance(v, str) and v.startswith(AUTO_INTERVAL_PREFIX)

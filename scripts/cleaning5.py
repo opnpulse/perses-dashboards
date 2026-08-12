@@ -1,6 +1,9 @@
 import os
 import json
 
+from statlabels import (PROTECTED_MAPPING_TITLES, VALUE_IS_LABEL,
+                        VALUE_MAPPED_TITLES, bare_label)
+
 # Root directory to start traversal
 root_dir = '.'   # change if needed
 
@@ -10,9 +13,58 @@ root_dir = '.'   # change if needed
 # (Go-map iteration order), which never executes against Prometheus.
 PROM_DATASOURCE = {"type": "prometheus", "uid": "global-ds-proxy"}
 
-# Panels whose value mappings encode their whole meaning (numeric metric -> role/state
-# text) and must survive migration. Everything else gets its mappings stripped.
-PROTECTED_MAPPING_TITLES = {"Role", "ReplSet State"}
+def is_label_stat(panel):
+    # Whether this stat panel will display a label instead of its metric value.
+    if panel.get("type") != "stat":
+        return False
+    targets = panel.get("targets", [])
+    if len(targets) != 1:
+        return False
+    label = bare_label(targets[0].get("legendFormat"))
+    if not label:
+        return False
+    return label in VALUE_IS_LABEL or panel.get("options", {}).get("textMode") == "name"
+
+MODERN_MAPPING_TYPES = {"value", "range", "regex", "special"}
+
+def normalize_mappings(defaults):
+    # Grafana's pre-v8 mapping format (`"type": 1` with flat value/text, `"type": 2` with
+    # from/to) makes `percli migrate` fail outright: "error in call to list.FlattenN".
+    # Rewrite those entries into the modern options-based shape it understands.
+    mappings = defaults.get("mappings")
+    if not isinstance(mappings, list):
+        return
+    out = []
+    for index, mapping in enumerate(mappings):
+        if not isinstance(mapping, dict):
+            continue
+        kind = mapping.get("type")
+        if kind in MODERN_MAPPING_TYPES:
+            out.append(mapping)
+        elif isinstance(mapping.get("options"), dict):
+            # Modern options dict left carrying a legacy numeric type.
+            out.append({"type": "value", "options": mapping["options"]})
+        elif kind == 1 or (kind is None and "value" in mapping):
+            # Grafana leaves behind blank placeholder rows; they map nothing.
+            if mapping.get("value") and mapping.get("text"):
+                out.append({"type": "value", "options": {
+                    str(mapping["value"]): {"text": mapping["text"], "index": index},
+                }})
+        elif kind == 2:
+            if mapping.get("from") and mapping.get("to"):
+                out.append({"type": "range", "options": {
+                    "from": mapping["from"],
+                    "to": mapping["to"],
+                    "result": {"text": mapping.get("text"), "index": index},
+                }})
+        # Anything else is unrecognised; dropping it beats failing the migration.
+    defaults["mappings"] = out
+
+def keeps_mappings(panel):
+    title = panel.get("title")
+    if title in PROTECTED_MAPPING_TITLES:
+        return True
+    return title in VALUE_MAPPED_TITLES and not is_label_stat(panel)
 
 def clean_panel(panel):
     # Remove unsupported keys
@@ -24,7 +76,9 @@ def clean_panel(panel):
     # Clean fieldConfig mappings, except on panels whose value mappings must survive
     # migration (they are the panel's whole purpose). See PROTECTED_MAPPING_TITLES.
     if "fieldConfig" in panel and "defaults" in panel["fieldConfig"]:
-        if panel.get("title") not in PROTECTED_MAPPING_TITLES:
+        if keeps_mappings(panel):
+            normalize_mappings(panel["fieldConfig"]["defaults"])
+        else:
             panel["fieldConfig"]["defaults"].pop("mappings", None)
     # Pin each target to the Prometheus datasource unless it already carries a typed one.
     # A datasource dict missing a "type" (e.g. {"uid": "${datasource}"}) is ambiguous and

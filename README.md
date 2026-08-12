@@ -75,7 +75,7 @@ percli apply -f test/mongo_summary.json
 
 ### Automated
 ```
-cd ~/go/src/go.opscenter.dev/grafana-dashboards
+cd ~/go/src/go.opnpulse.dev/dashboards
 python3 scripts/modify1.py
 python3 scripts/curl2.py
 python3 scripts/revert_modify3.py

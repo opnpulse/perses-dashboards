@@ -4,7 +4,7 @@ set -euo pipefail  # Exit on error, unset variables, and pipe failures
 
 # Resolve dirs: scripts live next to this file; grafana repo is env-overridable.
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/opnpulse/grafana-dashboards}"
+GRAFANA_DIR="${GRAFANA_DIR:-$HOME/go/src/go.opnpulse.dev/dashboards}"
 
 DEFAULT_FOLDERS=(
 # working
