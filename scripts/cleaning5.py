@@ -81,15 +81,13 @@ def clean_panel(panel):
             normalize_mappings(panel["fieldConfig"]["defaults"])
         else:
             panel["fieldConfig"]["defaults"].pop("mappings", None)
-    # Pin each target to the Prometheus datasource unless it already carries a typed one.
-    # A datasource dict missing a "type" (e.g. {"uid": "${datasource}"}) is ambiguous and
-    # makes `percli migrate` randomly emit LokiLogQuery, so set the type while keeping the uid.
+    # Pin every target to the Prometheus datasource. A missing "type" makes `percli
+    # migrate` randomly emit LokiLogQuery, and a variable uid (e.g. {"uid": "$datasource"})
+    # is copied verbatim into the Perses query, where datasource refs are resolved by name
+    # against the datasource registry rather than interpolated - so the dashboard fails
+    # with "No datasource found for kind 'PrometheusDatasource' and name '$datasource'".
     for target in panel.get("targets", []):
-        ds = target.get("datasource")
-        if not isinstance(ds, dict):
-            target["datasource"] = dict(PROM_DATASOURCE)
-        elif not ds.get("type"):
-            ds["type"] = PROM_DATASOURCE["type"]
+        target["datasource"] = dict(PROM_DATASOURCE)
     return panel
 
 def hoist_rows(panels):
