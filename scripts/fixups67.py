@@ -27,6 +27,13 @@ VALID_ALIGN = {"left", "center", "right"}
 # which Perses rejects as a duration string. Drop it / replace it with a real duration.
 AUTO_INTERVAL_PREFIX = "$__auto_interval"
 
+# cleaning5 pins every target to the `global-ds-proxy` uid purely so `percli migrate`
+# resolves PromQL targets deterministically; percli then copies that uid into each
+# query's datasource ref, pinning the panel to one server-side datasource and making the
+# dashboard's own Datasource picker inert. Point the refs at the picker instead.
+PINNED_DS_UID = 'global-ds-proxy'
+DS_VARIABLE_NAME = 'datasource'
+
 # percli copies the source Grafana `uid` verbatim into `metadata.name`, and
 # `.status.dashboard.id` surfaces that name. Duplicate/opaque source uids therefore
 # make distinct dashboards collide on the same Perses dashboard (last writer wins).
@@ -147,6 +154,12 @@ def process_file(filepath):
 
     changed = [False]
 
+    # Without a Datasource variable to point at (some upstream dashboards have none),
+    # the pinned uid is the only thing that resolves - leave those alone.
+    unpin_ds = any(v.get('spec', {}).get('name') == DS_VARIABLE_NAME
+                   for v in data.get('spec', {}).get('variables', [])
+                   if isinstance(v, dict))
+
     # Label-valued stat panels keep their mappings (the mapped text *is* the display).
     label_panels = set()
     for panel in data.get('spec', {}).get('panels', {}).values():
@@ -190,6 +203,10 @@ def process_file(filepath):
                 if len(kept) != len(obj['values']):
                     obj['values'] = kept
                     changed[0] = True
+            if (unpin_ds and obj.get('name') == PINNED_DS_UID
+                    and str(obj.get('kind', '')).endswith('Datasource')):
+                obj['name'] = '$' + DS_VARIABLE_NAME
+                changed[0] = True
             if obj.get('width') is None and 'width' in obj:
                 del obj['width']
                 changed[0] = True
